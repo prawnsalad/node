@@ -1,3 +1,18 @@
+# Node.js personal patches
+
+Useful patches that help in my day to day dev. I'm not a C dev so these patches may or may not be the best way to go about things but it works for me.
+
+## Fatally crash on a function deoptimisation
+
+~~~javascript
+function hotFunction(a, b) {
+  "use deopt-crash"
+  return a + b;
+}
+~~~
+
+In a hot code path JIT deoptimisations can kill performance while v8 does its thing. We could monitor `--trace-deopt` or we could just opt a function in to out right crash during development to make it really obvious.
+
 # Node.js
 
 Node.js is an open-source, cross-platform JavaScript runtime environment.

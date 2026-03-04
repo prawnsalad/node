@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <optional>
+#include <sstream>
 
 #include "src/asmjs/asm-js.h"
 #include "src/codegen/compilation-cache.h"
@@ -10,6 +11,7 @@
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
 #include "src/common/message-template.h"
+#include "src/deoptimizer/deopt-crash-inl.h"
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
@@ -473,6 +475,37 @@ RUNTIME_FUNCTION(Runtime_NotifyDeoptimized) {
   JavaScriptStackFrameIterator top_it(isolate);
   JavaScriptFrame* top_frame = top_it.frame();
   isolate->set_context(Cast<Context>(top_frame->context()));
+
+  bool should_crash = false;
+  const char* deopt_mode = "lazy";
+  switch (deopt_kind) {
+    case DeoptimizeKind::kEager:
+      deopt_mode = "eager";
+      should_crash = deopt_crash::ShouldCrashForEagerReason(
+          isolate, *optimized_code, deopt_reason);
+      break;
+    case DeoptimizeKind::kLazyAfterFastCall:
+      deopt_mode = "lazy-after-fast-call";
+      should_crash =
+          deopt_crash::ShouldCrashForCode(isolate, *optimized_code);
+      break;
+    case DeoptimizeKind::kLazy:
+      deopt_mode = "lazy";
+      should_crash =
+          deopt_crash::ShouldCrashForCode(isolate, *optimized_code);
+      break;
+  }
+
+  if (should_crash) {
+    std::ostringstream stack_stream;
+    isolate->PrintCurrentStackTrace(stack_stream);
+    std::string stack_trace = stack_stream.str();
+    const char* stack_extra =
+        stack_trace.empty() ? nullptr : stack_trace.c_str();
+    (deopt_crash::FatalOptedInDeopt)(
+        isolate, *optimized_code, deopt_mode,
+        DeoptimizeReasonToString(deopt_reason), stack_extra);
+  }
 
   // Lazy deopts don't invalidate the underlying optimized code since the code
   // object itself is still valid (as far as we know); the called function
